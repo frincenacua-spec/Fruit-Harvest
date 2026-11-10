@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fruit Harvest Dashboard</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #fff8ec; }
+  h1 { margin-top: 0; color: #b5461c; }
+  .cards { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .card { background: #fff; padding: 16px; border-radius: 8px; flex: 1; min-width: 140px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .card h3 { margin: 0; font-size: 14px; color: #666; }
+  .card p { margin: 6px 0 0; font-size: 22px; font-weight: bold; }
+  form, table { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  input, select { padding: 8px; flex: 1; min-width: 120px; }
+  button { padding: 8px 12px; margin: 2px; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; overflow-x: auto; display: block; }
+  th, td { text-align: left; padding: 10px; border-bottom: 1px solid #eee; white-space: nowrap; }
+</style>
+</head>
+<body>
+<h1>Fruit Harvest Dashboard</h1>
+
+<div class="cards">
+  <div class="card"><h3>Total Records</h3><p id="totalRecords">0</p></div>
+  <div class="card"><h3>Total Harvest (kg)</h3><p id="totalKg">0</p></div>
+</div>
+
+<form id="harvestForm">
+  <input id="fruitName" placeholder="Fruit (e.g. Mango)" required>
+  <input id="variety" placeholder="Variety (e.g. Carabao)">
+  <input id="quantity" type="number" min="0" step="any" placeholder="Quantity (kg)">
+  <select id="status">
+    <option>Harvested</option>
+    <option>Stored</option>
+    <option>Sold</option>
+  </select>
+  <input id="dateHarvested" type="date">
+  <button type="submit" id="saveBtn">Add</button>
+  <button type="button" id="cancelBtn" style="display:none">Cancel</button>
+</form>
+
+<table>
+  <thead><tr><th>Fruit</th><th>Variety</th><th>Kg</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+  <tbody id="tableBody"></tbody>
+</table>
+
+<script>
+  let harvests = [];
+  let editingId = null;
+
+  const form = document.getElementById('harvestForm');
+  const fruitEl = document.getElementById('fruitName');
+  const varietyEl = document.getElementById('variety');
+  const quantityEl = document.getElementById('quantity');
+  const statusEl = document.getElementById('status');
+  const dateEl = document.getElementById('dateHarvested');
+  const saveBtn = document.getElementById('saveBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text ?? '';
+    return div.innerHTML;
+  }
+
+  async function loadHarvests() {
+    const res = await fetch('/api/harvests');
+    harvests = await res.json();
+    render();
+  }
+
+  function render() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    let totalKg = 0;
+    harvests.forEach(h => {
+      totalKg += h.quantity_kg;
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${escapeHtml(h.fruit_name)}</td>
+        <td>${escapeHtml(h.variety)}</td>
+        <td>${h.quantity_kg}</td>
+        <td>${escapeHtml(h.status)}</td>
+        <td>${escapeHtml(h.date_harvested)}</td>
+        <td>
+          <button onclick="editHarvest(${h.id})">Edit</button>
+          <button onclick="deleteHarvest(${h.id})">Delete</button>
+        </td>`;
+      tbody.appendChild(row);
+    });
+    document.getElementById('totalRecords').textContent = harvests.length;
+    document.getElementById('totalKg').textContent = totalKg.toFixed(1);
+  }
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const body = {
+      fruit_name: fruitEl.value,
+      variety: varietyEl.value,
+      quantity_kg: parseFloat(quantityEl.value) || 0,
+      status: statusEl.value,
+      date_harvested: dateEl.value
+    };
+    const url = editingId ? `/api/harvests/${editingId}` : '/api/harvests';
+    const method = editingId ? 'PUT' : 'POST';
+    await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    resetForm();
+    loadHarvests();
+  });
+
+  function editHarvest(id) {
+    const h = harvests.find(x => x.id === id);
+    fruitEl.value = h.fruit_name;
+    varietyEl.value = h.variety;
+    quantityEl.value = h.quantity_kg;
+    statusEl.value = h.status;
+    dateEl.value = h.date_harvested;
+    editingId = id;
+    saveBtn.textContent = 'Update';
+    cancelBtn.style.display = 'inline';
+  }
+
+  async function deleteHarvest(id) {
+    if (!confirm('Delete this record?')) return;
+    await fetch(`/api/harvests/${id}`, { method: 'DELETE' });
+    loadHarvests();
+  }
+
+  function resetForm() {
+    form.reset();
+    editingId = null;
+    saveBtn.textContent = 'Add';
+    cancelBtn.style.display = 'none';
+  }
+
+  cancelBtn.addEventListener('click', resetForm);
+  loadHarvests();
+</script>
+</body>
+</html>
